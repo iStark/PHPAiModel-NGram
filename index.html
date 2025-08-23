@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ru">
 <meta charset="utf-8">
-<title>Чат на чистом PHP (фиксированный weights50_merged.json)</title>
+<title>Чат PHP — PHPAiModel-NGram</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
     :root { --fg:#0e1116; --mut:#556; --ai:#0a63c0; --me:#0b8c6a; --bg:#f6f7fb; }
@@ -10,28 +10,37 @@
     }
     body{font:16px/1.5 system-ui,Arial,sans-serif;color:var(--fg);background:var(--bg);margin:2rem;max-width:980px}
     .row{display:flex;gap:.6rem;flex-wrap:wrap;margin:.6rem 0}
-    input,button{font:inherit;padding:.5rem .6rem;border-radius:.5rem;border:1px solid #c8ccd8;background:#fff}
-    @media (prefers-color-scheme: dark){ input,button{background:#12151c;border:1px solid #2a2f3a;color:var(--fg)} }
+    input,button,select{font:inherit;padding:.5rem .6rem;border-radius:.5rem;border:1px solid #c8ccd8;background:#fff}
+    @media (prefers-color-scheme: dark){
+        input,button,select{background:#12151c;border:1px solid #2a2f3a;color:var(--fg)}
+    }
     input[type=number]{width:7rem} button{cursor:pointer}
     #log{background:#fff;border:1px solid #d9dce6;border-radius:12px;padding:1rem;min-height:220px}
     @media (prefers-color-scheme: dark){ #log{background:#0f131a;border-color:#242a35} }
     .msg{white-space:pre-wrap;margin:.5rem 0}
-    .sys{color:#556}.ai{color:#0a63c0}.user{color:#0b8c6a}
-    .hint{color:#556;font-size:.9em}
+    .sys{color:var(--mut)}.ai{color:var(--ai)}.user{color:var(--me)}
+    .hint{color:var(--mut);font-size:.9em}
+    .danger{color:#b00020}
+    .grow{flex:1}
 </style>
 
-<h1>Чат (Вес: weights.json)</h1>
+<h1>Чат</h1>
 
 <div class="row">
+    <label class="grow">Модель:
+        <select id="model" class="grow" disabled>
+            <option disabled selected>Загрузка списка…</option>
+        </select>
+    </label>
     <button id="reset">Сбросить историю</button>
-    <span class="hint">Сервер всегда использует weights50_merged.json</span>
 </div>
+<div class="row"><span id="modelWarn" class="danger" style="display:none">Выберите модель, прежде чем отправлять сообщения.</span></div>
 
-<div id="log" class="msg sys">Система: готово. Пишите вопрос.</div>
+<div id="log" class="msg sys">Система: выберите модель и задайте вопрос.</div>
 
 <div class="row">
-    <input id="q" placeholder="Сообщение" style="flex:1">
-    <button id="send">Отправить</button>
+    <input id="q" placeholder="Сообщение" class="grow">
+    <button id="send" disabled>Отправить</button>
 </div>
 
 <div class="row">
@@ -46,37 +55,99 @@
 <p class="hint">Если много повторов — rep_penalty 1.2 и rep_window 220; если слишком креативно — temp 0.75 и top_k 100–120.</p>
 <a class="hint" href="merge_weights.php">Миграция весов</a>
 <a class="hint" href="debug_weights.php">Отладка весов</a>
-<p class="hint">Проект на <a class="hint" href="https://github.com/iStark/PHPAiModel-NGram">гитхабе</a>, Автор: Artur Strazewicz (Strazhevich)</p>
+
 <script>
     const log = document.getElementById('log');
-    const q   = document.getElementById('q');
+    const q = document.getElementById('q');
+    const sendBtn = document.getElementById('send');
+    const modelSel = document.getElementById('model');
+    const warn = document.getElementById('modelWarn');
+    const LS_KEY = 'ngram_selected_model';
 
-    function add(who,text,cls=''){ const d=document.createElement('div'); d.className='msg '+cls;
-        d.innerHTML=`<b>${who}:</b> `+text.replace(/&/g,'&amp;').replace(/</g,'&lt;'); log.appendChild(d);
-        window.scrollTo(0, document.body.scrollHeight); }
+    function add(who,text,cls=''){
+        const d=document.createElement('div'); d.className='msg '+cls;
+        d.innerHTML=`<b>${who}:</b> `+text.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+        log.appendChild(d); window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    function setSendEnabled(on){
+        sendBtn.disabled = !on;
+        warn.style.display = on ? 'none':'inline';
+    }
+
+    async function loadModels(){
+        try{
+            const r = await fetch('list_models.php', {cache:'no-store'});
+            const data = await r.json();
+            modelSel.innerHTML = '';
+            if(!data.ok || !Array.isArray(data.models) || data.models.length===0){
+                modelSel.disabled = true;
+                const opt = document.createElement('option');
+                opt.textContent = 'Модели не найдены (положите *.json в /Models)'; opt.disabled = true; opt.selected = true;
+                modelSel.appendChild(opt);
+                setSendEnabled(false);
+                return;
+            }
+            data.models.forEach(m=>{
+                const opt = document.createElement('option');
+                const mb = (m.size/1048576).toFixed(2);
+                const dt = m.mtime ? new Date(m.mtime*1000).toISOString().slice(0,19).replace('T',' ') : '';
+                opt.value = m.file; opt.textContent = `${m.file} — ${mb} MB ${dt?('('+dt+')'):''}`;
+                modelSel.appendChild(opt);
+            });
+            modelSel.disabled = false;
+
+            const saved = localStorage.getItem(LS_KEY);
+            if(saved && [...modelSel.options].some(o=>o.value===saved)) modelSel.value = saved;
+
+            setSendEnabled(!!modelSel.value);
+        }catch(e){
+            modelSel.innerHTML = '<option disabled selected>Ошибка загрузки списка моделей</option>';
+            modelSel.disabled = true;
+            setSendEnabled(false);
+        }
+    }
+
+    modelSel.addEventListener('change', ()=>{
+        if(modelSel.value){ localStorage.setItem(LS_KEY, modelSel.value); setSendEnabled(true); }
+        else { setSendEnabled(false); }
+    });
 
     async function send(){
+        const model = modelSel.value;
+        if(!model){ setSendEnabled(false); return; }
         const text = q.value.trim(); if(!text) return;
         add('Вы', text, 'user'); q.value='';
+
         const body = {
             message: text,
-            temperature: parseFloat(document.getElementById('temperature').value||'0.3'),
-            top_k: parseInt(document.getElementById('top_k').value||'140',10),
-            top_p: parseFloat(document.getElementById('top_p').value||'0.85'),
+            model: model, // обязательный параметр
+            temperature: parseFloat(document.getElementById('temperature').value||'0.9'),
+            top_k: parseInt(document.getElementById('top_k').value||'160',10),
+            top_p: parseFloat(document.getElementById('top_p').value||'0.95'),
             rep_penalty: parseFloat(document.getElementById('rep_penalty').value||'1.0'),
             rep_window: parseInt(document.getElementById('rep_window').value||'180',10),
             max_tokens: parseInt(document.getElementById('max_tokens').value||'140',10)
         };
+
         const r = await fetch('aicore.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-        const data = await r.json();
+        let data = {};
+        try{ data = await r.json(); }catch(_){}
+        if(!r.ok){
+            add('Сервер', (data.error || ('HTTP '+r.status)), 'sys');
+            return;
+        }
         const meta = data.N ? `\n\n[weights: ${data.weights}, N=${data.N}, tokens=${data.tokens_generated}]` : '';
         add('ИИ', (data.reply || '(пусто)') + meta, 'ai');
     }
+
     document.getElementById('send').onclick = send;
     q.addEventListener('keydown', e=>{ if(e.key==='Enter') send(); });
     document.getElementById('reset').onclick = async ()=>{
         await fetch('reset.php').catch(()=>{});
         add('Система','История сброшена.','sys');
     };
+
+    loadModels();
 </script>
 </html>
