@@ -9,10 +9,10 @@
 >Format: JSON with N (order), unigram counts, grams (context → next token counts), and optional meta.
 
 ##Tools included:
->`index.html` (UI), 
->`aicore.php` (core inference), 
->`merge_weights.php` (combine & prune),
->`debug_weights.php` (debug ;))
+- `index.html` —  UI 
+- `aicore.php` —  core inference
+- `merge_weights.php` —  combine & prune
+- `debug_weights.php` —  debug ;)
 
 
 ### What this is
@@ -58,7 +58,7 @@
 - `index.html` — веб-интерфейс,
 - `aicore.php` — ядро для вывода результатов,
 - `merge_weights.php` — объединение и оптимизация весов,
-- `debug_weights.php` — отладка весов.
+- `debug_weights.php` — отладка и проверка на ошибки весов. 
 
 ## Формат файла
 
