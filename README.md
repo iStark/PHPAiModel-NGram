@@ -37,6 +37,7 @@
     "pad": "AAAA... (optional big padding to reach target size)"
   }
 }
+```
 
 # PHPAiModel-NGram
 
