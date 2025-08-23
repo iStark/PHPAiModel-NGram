@@ -1,14 +1,11 @@
 # PHPAiModel-NGram
 
 >N-gram Chat Model (RU/EN)
+> DEMO/ДЕМО https://aiphpngram.asted.cloud/
 
->This repository contains a toy word-level N-gram “weights” format and pure-PHP utilities to train, merge, and run a tiny chat model on shared hosting (no SSH, no external services).
+>This repository contains a toy word-level N-gram “weights” format and pure-PHP utilities to train, merge, and run a tiny chat model on shared hosting (no SSH, no external services, need OpenServer/Docker/Hosting).
 
->What this is
-
->Format: JSON with N (order), unigram counts, grams (context → next token counts), and optional meta.
-
-##Tools included:
+## Tools included:
 - `index.html` —  UI 
 - `aicore.php` —  core inference
 - `merge_weights.php` —  combine & prune
@@ -43,7 +40,7 @@
 
 > Модель чата на основе N-грамм (RU/EN)
 
-Этот репозиторий содержит компактный формат «весов» для N-грамм на уровне слов и утилиты на чистом PHP для обучения, объединения и работы небольшой чат-модели на общем хостинге (без SSH и внешних сервисов).
+Этот репозиторий содержит компактный формат «весов» для N-грамм на уровне слов и утилиты на чистом PHP для обучения, объединения и работы небольшой чат-модели на общем хостинге (без SSH и внешних сервисов, нужен OpenServer/Docker/Hosting).
 
 ## Что это такое
 
