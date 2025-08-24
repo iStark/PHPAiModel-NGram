@@ -1,48 +1,68 @@
 <!doctype html>
-<html lang="ru">
-<meta charset="utf-8">
-<title>Чат PHP — PHPAiModel-NGram</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-    :root { --fg:#0e1116; --mut:#556; --ai:#0a63c0; --me:#0b8c6a; --bg:#f6f7fb; }
-    @media (prefers-color-scheme: dark){
-        :root { --fg:#e7e9ee; --mut:#aab; --ai:#7fb1ff; --me:#77dfc0; --bg:#0b0d12; }
-    }
-    body{font:16px/1.5 system-ui,Arial,sans-serif;color:var(--fg);background:var(--bg);margin:2rem;max-width:980px}
-    .row{display:flex;gap:.6rem;flex-wrap:wrap;margin:.6rem 0}
-    input,button,select{font:inherit;padding:.5rem .6rem;border-radius:.5rem;border:1px solid #c8ccd8;background:#fff}
-    @media (prefers-color-scheme: dark){
-        input,button,select{background:#12151c;border:1px solid #2a2f3a;color:var(--fg)}
-    }
-    input[type=number]{width:7rem} button{cursor:pointer}
-    #log{background:#fff;border:1px solid #d9dce6;border-radius:12px;padding:1rem;min-height:220px}
-    @media (prefers-color-scheme: dark){ #log{background:#0f131a;border-color:#242a35} }
-    .msg{white-space:pre-wrap;margin:.5rem 0}
-    .sys{color:var(--mut)}.ai{color:var(--ai)}.user{color:var(--me)}
-    .hint{color:var(--mut);font-size:.9em}
-    .danger{color:#b00020}
-    .grow{flex:1}
-</style>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title id="title">Chat PHP — PHPAiModel-NGram</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root { --fg:#0e1116; --mut:#556; --ai:#0a63c0; --me:#0b8c6a; --bg:#f6f7fb; }
+        @media (prefers-color-scheme: dark){
+            :root { --fg:#e7e9ee; --mut:#aab; --ai:#7fb1ff; --me:#77dfc0; --bg:#0b0d12; }
+        }
+        body{font:16px/1.5 system-ui,Arial,sans-serif;color:var(--fg);background:var(--bg);margin:2rem;max-width:980px}
+        .row{display:flex;gap:.6rem;flex-wrap:wrap;margin:.6rem 0}
+        input,button,select{font:inherit;padding:.5rem .6rem;border-radius:.5rem;border:1px solid #c8ccd8;background:#fff}
+        @media (prefers-color-scheme: dark){
+            input,button,select{background:#12151c;border:1px solid #2a2f3a;color:var(--fg)}
+        }
+        input[type=number]{width:7rem} button{cursor:pointer}
+        #log{background:#fff;border:1px solid #d9dce6;border-radius:12px;padding:1rem;min-height:220px}
+        @media (prefers-color-scheme: dark){ #log{background:#0f131a;border-color:#242a35} }
+        .msg{white-space:pre-wrap;margin:.5rem 0}
+        .sys{color:var(--mut)}.ai{color:var(--ai)}.user{color:var(--me)}
+        .hint{color:var(--mut);font-size:.9em}
+        .danger{color:#b00020}
+        .grow{flex:1}
+        footer{margin-top:2rem;font-size:.9em;color:var(--mut)}
+        footer a{color:inherit}
+        .links a{margin-right:.75rem}
+    </style>
+</head>
+<body>
 
-<h1>Чат</h1>
+<h1 id="header">Chat</h1>
 
+
+<!-- Model selector + reset -->
 <div class="row">
-    <label class="grow">Модель:
+    <label class="grow"><span id="modelLabel">Model:</span>
         <select id="model" class="grow" disabled>
-            <option disabled selected>Загрузка списка…</option>
+            <option disabled selected>Loading…</option>
         </select>
     </label>
-    <button id="reset">Сбросить историю</button>
+    <button id="reset" type="button">Reset history</button>
+    <!-- Language selector -->
+    <label>Language:
+        <select id="langSel" aria-label="Language selector">
+            <option value="en">EN</option>
+            <option value="ru">RU</option>
+        </select>
+    </label>
 </div>
-<div class="row"><span id="modelWarn" class="danger" style="display:none">Выберите модель, прежде чем отправлять сообщения.</span></div>
-
-<div id="log" class="msg sys">Система: выберите модель и задайте вопрос.</div>
-
 <div class="row">
-    <input id="q" placeholder="Сообщение" class="grow">
-    <button id="send" disabled>Отправить</button>
+    <span id="modelWarn" class="danger" style="display:none">Select a model before sending messages.</span>
 </div>
 
+<!-- Chat log -->
+<div id="log" class="msg sys">System: choose a model and ask a question.</div>
+
+<!-- Input & send -->
+<div class="row">
+    <input id="q" placeholder="Message" class="grow" aria-label="Your message">
+    <button id="send" type="button" disabled>Send</button>
+</div>
+
+<!-- Sampling params -->
 <div class="row">
     <label>temp <input id="temperature" type="number" step="0.05" value="0.90"></label>
     <label>top_k <input id="top_k" type="number" value="160"></label>
@@ -52,27 +72,87 @@
     <label>max_tok <input id="max_tokens" type="number" value="140"></label>
 </div>
 
-<p class="hint">Если много повторов — rep_penalty 1.2 и rep_window 220; если слишком креативно — temp 0.75 и top_k 100–120.</p>
-<a class="hint" href="merge_weights.php">Миграция весов</a>
-<a class="hint" href="debug_weights.php">Отладка весов</a>
+<p class="hint" id="paramsHint">
+    If you see many repeats — set rep_penalty 1.2 and rep_window 220; if it’s too creative — temp 0.75 and top_k 100–120.
+</p>
+<a class="hint" id="merge" href="merge_weights.php">Merge weights</a>
+<a class="hint" id="debug" href="debug_weights.php" style="margin-left:.75rem">Debug weights</a>
+
+<footer>
+    <div><strong>PHPAiModel‑NGram</strong> — lightweight word‑level N‑gram chat in pure PHP.</div>
+    <div>© <span id="year">2025</span>. Developed by <strong>Artur Strazewicz</strong> — concept, architecture, PHP N‑gram runtime, UI, documentation. Licensed under <a href="LICENSE" target="_blank" rel="noopener">MIT</a>.</div>
+    <div class="links">
+        <a href="https://github.com/iStark/PHPAiModel-NGram" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://www.linkedin.com/in/arthur-stark/" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="https://truthsocial.com/@strazewicz" target="_blank" rel="noopener">Truth Social</a>
+        <a href="https://x.com/strazewicz" target="_blank" rel="noopener">X (Twitter)</a>
+    </div>
+</footer>
 
 <script>
+    // --- i18n state ---
+    const LS_LANG_KEY = 'ngram_ui_lang';
+    let i18n = {
+        lang: 'en',
+        t: {} // translations loaded from /lang/{en|ru}.json
+    };
+
+    // --- DOM refs ---
     const log = document.getElementById('log');
     const q = document.getElementById('q');
     const sendBtn = document.getElementById('send');
     const modelSel = document.getElementById('model');
     const warn = document.getElementById('modelWarn');
-    const LS_KEY = 'ngram_selected_model';
+    const langSel = document.getElementById('langSel');
 
-    function add(who,text,cls=''){
-        const d=document.createElement('div'); d.className='msg '+cls;
-        d.innerHTML=`<b>${who}:</b> `+text.replace(/&/g,'&amp;').replace(/</g,'&lt;');
-        log.appendChild(d); window.scrollTo(0, document.body.scrollHeight);
+    // --- helpers ---
+    function add(who, text, cls=''){
+        const d = document.createElement('div');
+        d.className = 'msg ' + cls;
+        const safe = String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+        d.innerHTML = `<b>${who}:</b> ` + safe;
+        log.appendChild(d);
+        window.scrollTo(0, document.body.scrollHeight);
     }
 
     function setSendEnabled(on){
         sendBtn.disabled = !on;
-        warn.style.display = on ? 'none':'inline';
+        warn.style.display = on ? 'none' : 'inline';
+    }
+
+    async function loadLang(lang){
+        try{
+            const r = await fetch(`lang/${lang}.json`, {cache: 'no-store'});
+            const t = await r.json();
+            i18n.lang = lang;
+            i18n.t = t;
+
+            // Apply translations
+            document.documentElement.lang = (lang === 'ru' ? 'ru' : 'en');
+            document.title = t.title;
+            document.getElementById('title').textContent = t.title;
+            document.getElementById('header').textContent = t.header;
+            document.getElementById('modelLabel').textContent = t.model;
+            document.getElementById('reset').textContent = t.reset;
+            document.getElementById('modelWarn').textContent = t.warn;
+            document.getElementById('q').placeholder = t.placeholder;
+            document.getElementById('send').textContent = t.send;
+            document.getElementById('paramsHint').textContent = t.params_hint;
+            document.getElementById('merge').textContent = t.merge;
+            document.getElementById('debug').textContent = t.debug;
+
+            // Initialize the log with system message if it's still empty / initial
+            if(log.textContent.trim().startsWith('System:') || log.textContent.trim().startsWith('Система:')){
+                log.textContent = t.system;
+            }
+
+            // Persist selection
+            localStorage.setItem(LS_LANG_KEY, lang);
+            // Update <select> if changed from code
+            if(langSel.value !== lang) langSel.value = lang;
+        }catch(e){
+            console.error('i18n load failed', e);
+        }
     }
 
     async function loadModels(){
@@ -83,7 +163,8 @@
             if(!data.ok || !Array.isArray(data.models) || data.models.length===0){
                 modelSel.disabled = true;
                 const opt = document.createElement('option');
-                opt.textContent = 'Модели не найдены (положите *.json в /Models)'; opt.disabled = true; opt.selected = true;
+                opt.textContent = i18n.t.models_missing || 'No models found (place *.json into /Models)';
+                opt.disabled = true; opt.selected = true;
                 modelSel.appendChild(opt);
                 setSendEnabled(false);
                 return;
@@ -92,36 +173,42 @@
                 const opt = document.createElement('option');
                 const mb = (m.size/1048576).toFixed(2);
                 const dt = m.mtime ? new Date(m.mtime*1000).toISOString().slice(0,19).replace('T',' ') : '';
-                opt.value = m.file; opt.textContent = `${m.file} — ${mb} MB ${dt?('('+dt+')'):''}`;
+                opt.value = m.file;
+                opt.textContent = `${m.file} — ${mb} MB ${dt?('('+dt+')'):''}`;
                 modelSel.appendChild(opt);
             });
             modelSel.disabled = false;
 
-            const saved = localStorage.getItem(LS_KEY);
+            const saved = localStorage.getItem('ngram_selected_model');
             if(saved && [...modelSel.options].some(o=>o.value===saved)) modelSel.value = saved;
 
             setSendEnabled(!!modelSel.value);
         }catch(e){
-            modelSel.innerHTML = '<option disabled selected>Ошибка загрузки списка моделей</option>';
+            modelSel.innerHTML = '<option disabled selected>'+(i18n.t.models_load_error || 'Unable to load models list')+'</option>';
             modelSel.disabled = true;
             setSendEnabled(false);
         }
     }
 
     modelSel.addEventListener('change', ()=>{
-        if(modelSel.value){ localStorage.setItem(LS_KEY, modelSel.value); setSendEnabled(true); }
-        else { setSendEnabled(false); }
+        if(modelSel.value){
+            localStorage.setItem('ngram_selected_model', modelSel.value);
+            setSendEnabled(true);
+        } else {
+            setSendEnabled(false);
+        }
     });
 
     async function send(){
         const model = modelSel.value;
         if(!model){ setSendEnabled(false); return; }
         const text = q.value.trim(); if(!text) return;
-        add('Вы', text, 'user'); q.value='';
+        add(i18n.t.you || 'You', text, 'user');
+        q.value='';
 
         const body = {
             message: text,
-            model: model, // обязательный параметр
+            model: model, // required by backend
             temperature: parseFloat(document.getElementById('temperature').value||'0.9'),
             top_k: parseInt(document.getElementById('top_k').value||'160',10),
             top_p: parseFloat(document.getElementById('top_p').value||'0.95'),
@@ -134,20 +221,28 @@
         let data = {};
         try{ data = await r.json(); }catch(_){}
         if(!r.ok){
-            add('Сервер', (data.error || ('HTTP '+r.status)), 'sys');
+            add(i18n.t.server || 'Server', (data.error || ('HTTP '+r.status)), 'sys');
             return;
         }
         const meta = data.N ? `\n\n[weights: ${data.weights}, N=${data.N}, tokens=${data.tokens_generated}]` : '';
-        add('ИИ', (data.reply || '(пусто)') + meta, 'ai');
+        add(i18n.t.ai || 'AI', (data.reply || '(empty)') + meta, 'ai');
     }
 
     document.getElementById('send').onclick = send;
     q.addEventListener('keydown', e=>{ if(e.key==='Enter') send(); });
     document.getElementById('reset').onclick = async ()=>{
         await fetch('reset.php').catch(()=>{});
-        add('Система','История сброшена.','sys');
+        add(i18n.t.system_name || 'System', i18n.t.history_reset || 'History has been reset.', 'sys');
     };
+    langSel.addEventListener('change', e=> loadLang(e.target.value));
 
-    loadModels();
+    // Set current year in footer (kept static if JS disabled)
+    document.getElementById('year').textContent = String(new Date().getFullYear());
+
+    // Bootstrap: language, then models
+    const initialLang = localStorage.getItem(LS_LANG_KEY) || 'en';
+    langSel.value = initialLang;
+    loadLang(initialLang).then(loadModels);
 </script>
+</body>
 </html>

@@ -1,16 +1,29 @@
 <?php
-// aicore.php — словная N-грамм модель, модель ОБЯЗАТЕЛЬНО передаётся как body.model
+/*
+ * PHPAiModel-NGram — aicore.php
+ * Core word-level N-gram model inference endpoint.
+ *
+ * Developed by: Artur Strazewicz — concept, architecture, PHP N-gram runtime, UI.
+ * Year: 2025. License: MIT.
+ *
+ * Links:
+ *   GitHub:      https://github.com/iStark/PHPAiModel-NGram
+ *   LinkedIn:    https://www.linkedin.com/in/arthur-stark/
+ *   TruthSocial: https://truthsocial.com/@strazewicz
+ *   X (Twitter): https://x.com/strazewicz
+ */
+
 declare(strict_types=1);
 session_start();
 header('Content-Type: application/json; charset=utf-8');
 
 $MODELS_DIR = __DIR__ . DIRECTORY_SEPARATOR . 'Models';
 
-// читаем тело запроса (ОДИН раз)
+// read request body (only once)
 $raw  = file_get_contents('php://input') ?: '';
 $body = json_decode($raw, true) ?? [];
 
-// требуем модель
+// require model param
 $requested = (string)($body['model'] ?? '');
 if ($requested === '') {
     http_response_code(400);
@@ -30,9 +43,9 @@ if (!is_file($weights_path)) {
     exit;
 }
 
-// параметры
+// parameters
 $user        = trim((string)($body['message'] ?? ''));
-$user = mb_strtolower($user, 'UTF-8');
+$user        = mb_strtolower($user, 'UTF-8');
 $max_tokens  = max(1, min(200000, (int)($body['max_tokens']  ?? 1400)));
 $temperature = max(0.05, min(2.0,    (float)($body['temperature'] ?? 0.30)));
 $top_k       = max(1,    min(400,    (int)($body['top_k'] ?? 160)));
@@ -46,15 +59,15 @@ if ($user === '') {
     exit;
 }
 if (!isset($_SESSION['lang'])) {
-    $_SESSION['lang'] = 'ru'; // стартуем с русского по умолчанию
+    $_SESSION['lang'] = 'ru'; // default: Russian
 }
-$det = detect_lang_from_text($user);  // функция из хелперов
+$det = detect_lang_from_text($user);  // language detection helper
 if ($det !== '') {
-    $_SESSION['lang'] = $det;  // если нашли буквы — обновили
+    $_SESSION['lang'] = $det;  // update session if detected
 }
 $target_lang = $_SESSION['lang'];      // 'ru' | 'en'
 
-// грузим модель
+// load model
 $model = json_decode(file_get_contents($weights_path), true);
 if (!$model || !isset($model['unigram'], $model['grams'])) {
     http_response_code(500);
@@ -62,7 +75,7 @@ if (!$model || !isset($model['unigram'], $model['grams'])) {
     exit;
 }
 
-// чистим спец-токены
+// remove special tokens
 $drop = ['OK','FILL','DATA'];
 foreach ($drop as $tok) { unset($model['unigram'][$tok]); }
 foreach ($model['grams'] as $n => &$tab) {
@@ -74,7 +87,7 @@ foreach ($model['grams'] as $n => &$tab) {
 }
 unset($tab, $dist);
 
-// ——— токенизация / детокенизация ———
+// --- tokenization / detokenization ---
 function tokenize(string $text): array {
     $re = '/\n|[A-Za-zА-Яа-яЁё0-9]+|[^\sA-Za-zА-Яа-яЁё0-9]/u';
     preg_match_all($re, $text, $m);
@@ -93,18 +106,18 @@ function detok(array $tokens): string {
     return $out;
 }
 
-// --- язык входа / фильтр токенов по алфавиту ---
+// --- language detection / token filtering ---
 function detect_lang_from_text(string $s): string {
     if (preg_match('/\p{Cyrillic}/u', $s)) return 'ru';
     if (preg_match('/[A-Za-z]/',       $s)) return 'en';
-    return ''; // нет букв (эмодзи/цифры/знаки)
+    return ''; // no letters (emoji/numbers/symbols only)
 }
 function token_is_lang(string $t, string $lang): bool {
     $has_cyr = (bool)preg_match('/\p{Cyrillic}/u', $t);
     $has_lat = (bool)preg_match('/[A-Za-z]/',       $t);
-    // нейтральные токены (пунктуация, цифры, переносы) разрешаем всегда
+    // neutral tokens (punctuation, digits, line breaks) are always allowed
     if (!$has_cyr && !$has_lat) return true;
-    // жёстко исключаем смешанные слова типа "OKей" (оба алфавита)
+    // exclude mixed words like "OKей" (both alphabets)
     if ($has_cyr && $has_lat)   return false;
     return $lang === 'ru' ? ($has_cyr && !$has_lat) : ($has_lat && !$has_cyr);
 }
@@ -116,7 +129,7 @@ function filter_dist_by_lang(array $dist, string $lang): array {
     }
     return $f;
 }
-// ★ только нейтральные токены (если после фильтрации пусто)
+// ★ neutral tokens only (if distribution is empty after filtering)
 function filter_neutral_only(array $dist): array {
     $f = [];
     foreach ($dist as $tok => $w) {
@@ -152,29 +165,28 @@ function sample_dist(array $dist, float $temperature, int $top_k, float $top_p, 
     end($cut); return key($cut);
 }
 
-// ——— параметры модели ———
+// --- model params ---
 $N     = max(2, min(100, (int)($model['N'] ?? 10)));
 $grams = $model['grams'];
 $uni   = $model['unigram'];
 
-// ——— история ———
+// --- history ---
 if (!isset($_SESSION['tokens'])) {
-    $_SESSION['tokens'] = tokenize("Система : ты — полезный ассистент . Отвечай кратко . \n");
+    $_SESSION['tokens'] = tokenize("System : you are a helpful assistant . Answer briefly . \n");
 }
 $history = &$_SESSION['tokens'];
 $max_history_tokens = 2400;
 
-// добавляем запрос и префикс роли
-$history = array_merge($history, tokenize("Пользователь : ".$user."\n"));
+// append user query
+$history = array_merge($history, tokenize("User : ".$user."\n"));
 if (count($history) > $max_history_tokens) $history = array_slice($history, -$max_history_tokens);
 
-// ——— генерация ———
+// --- generation ---
 $lambda_unigram = 0.03;
 $order_gamma    = 1.25;
 $min_stop_len   = 8;
 
-// ★ (опционально) параметр для бана точных повторов; если он у тебя
-// где-то задаётся вне этого файла — оставь как есть.
+// optional ban for repeated n-grams
 $no_repeat_ngram = $no_repeat_ngram ?? 0;
 
 $out = [];
@@ -202,13 +214,12 @@ for ($i = 0; $i < $max_tokens; $i++) {
     }
 
     if ($hits === 0) {
-        // ★ ФОЛБЭК ТОЛЬКО ЧЕРЕЗ ФИЛЬТРАЦИЮ ПО ЯЗЫКУ
+        // fallback using only filtered unigrams
         $cand = filter_dist_by_lang($uni, $target_lang);
         if (empty($cand)) {
-            // ★ если после фильтрации пусто — оставим только нейтральные знаки
+            // fallback to neutral tokens only
             $cand = filter_neutral_only($uni);
         }
-        // запрет повторных n-грамм (если функция определена)
         if (function_exists('block_no_repeat')) {
             block_no_repeat($seq, $no_repeat_ngram, $cand);
         }
@@ -223,21 +234,19 @@ for ($i = 0; $i < $max_tokens; $i++) {
                 }
             }
         }
-        // ★ фильтрация по языку — ПОСЛЕ примеси униграмм
+        // filter by language AFTER unigram mix
         $mix = filter_dist_by_lang($mix, $target_lang);
 
-        // запрет повторных n-грамм
         if (function_exists('block_no_repeat')) {
             block_no_repeat($seq, $no_repeat_ngram, $mix);
         }
         $chosen = sample_dist($mix, $temperature, $top_k, $top_p, $repCnt, $rep_penalty);
         if ($chosen === null) break;
 
-        // избегаем внезапного перехода к роли "Пользователь" на новой строке
+        // avoid switching to "User" role on a new line
         $ln = count($out);
-        if ($chosen === "Пользователь" && $ln > 0 && $out[$ln-1] === "\n") {
+        if ($chosen === "User" && $ln > 0 && $out[$ln-1] === "\n") {
             $mix[$chosen] = 0.0;
-            // ★ повторная выборка с тем же ОТРЕЗАННЫМ дистрибутивом
             $chosen = sample_dist($mix ?: filter_dist_by_lang($uni, $target_lang), $temperature, $top_k, $top_p, $repCnt, $rep_penalty);
             if ($chosen === null) break;
         }
@@ -248,7 +257,7 @@ for ($i = 0; $i < $max_tokens; $i++) {
     if ($chosen === "\n" && $i >= $min_stop_len) break;
 
     $ln = count($out);
-    if ($ln >= 3 && $out[$ln-3] === "\n" && $out[$ln-2] === "Пользователь" && $out[$ln-1] === ":") {
+    if ($ln >= 3 && $out[$ln-3] === "\n" && $out[$ln-2] === "User" && $out[$ln-1] === ":") {
         array_splice($out, -2);
         break;
     }
@@ -258,12 +267,12 @@ $reply = trim(detok($out));
 if ($reply === '') {
     $reply = ($target_lang === 'en' ? 'ok.' : 'окей.');
 }
-// приводим всё к нижнему регистру
+// normalize to lowercase
 $reply = mb_strtolower($reply, 'UTF-8');
 
 $history = array_merge($history, $out);
 
-// ответ
+// response
 echo json_encode([
     'reply'            => $reply,
     'tokens_generated' => count($out),

@@ -1,14 +1,28 @@
 <?php
-// debug_weights.php — просмотрщик n-грамм с выбором модели из папки Models
-// CLI примеры:
+/*
+ * PHPAiModel-NGram — debug_weights.php
+ * N-gram viewer / inspector with model selection from /Models.
+ *
+ * Developed by: Artur Strazewicz — concept, architecture, PHP N‑gram runtime, UI.
+ * Year: 2025. License: MIT.
+ *
+ * Links:
+ *   GitHub:      https://github.com/iStark/PHPAiModel-NGram
+ *   LinkedIn:    https://www.linkedin.com/in/arthur-stark/
+ *   TruthSocial: https://truthsocial.com/@strazewicz
+ *   X (Twitter): https://x.com/strazewicz
+ */
+
+// debug_weights.php — N-gram viewer with model selection from the Models folder
+// CLI examples:
 //   php debug_weights.php --dir=Models --list
 //   php debug_weights.php --dir=Models --pick=1 --ctx="привет" --k=20
 //   php debug_weights.php --model=auto --ctx="hello" --k=20 --lambda=0.4
 //   php debug_weights.php --model=Models/weights_dialog_ru_en_50000.json --ctx="как дела"
-// HTTP примеры:
-//   /debug_weights.php                         -> HTML-UI выбора модели
-//   /debug_weights.php?format=json             -> JSON со списком моделей
-//   /debug_weights.php?model=auto&ctx=привет   -> JSON с топ-кандидатами
+// HTTP examples:
+//   /debug_weights.php                         -> HTML UI for model selection
+//   /debug_weights.php?format=json             -> JSON list of models
+//   /debug_weights.php?model=auto&ctx=привет   -> JSON with top candidates
 
 declare(strict_types=1);
 
@@ -65,7 +79,7 @@ function find_contexts(array $model, int $level, string $re, int $limit=50): arr
     $out = [];
     $grams = $model['grams'][$level] ?? null;
     if (!$grams) return $out;
-    // безопасно собрать регэксп
+    // safely build the regex
     $rx = @preg_match($re, '') !== false ? $re : '/'.str_replace('/', '\/', $re).'/iu';
     foreach ($grams as $ctx => $nexts) {
         if (preg_match($rx, $ctx)) {
@@ -160,7 +174,7 @@ function top_candidates(array $model, array $ctxTokens, int $topK, float $lambda
     return ['candidates'=>$items, 'used_levels'=>$usedLevels, 'norm_sum'=>$sumAcc];
 }
 
-// ---------- Сканирование папки моделей ----------
+// ---------- Scan models directory ----------
 function scan_models(string $dir): array {
     $out = [];
     if (!is_dir($dir)) return $out;
@@ -172,7 +186,7 @@ function scan_models(string $dir): array {
             'size'  => @filesize($path) ?: 0,
         ];
     }
-    // сортируем по дате (новые первыми)
+    // sort by modification time (newest first)
     usort($out, fn($a,$b)=> $b['mtime'] <=> $a['mtime']);
     return $out;
 }
@@ -185,7 +199,7 @@ function human_size(int $bytes): string {
     return sprintf('%.1f %s', $v, $u[$i]);
 }
 
-// ---------- Параметры ----------
+// ---------- Parameters ----------
 $modelsDir = (string) arg('dir', __DIR__ . DIRECTORY_SEPARATOR . 'Models');
 $modelPath = (string) arg('model', '');
 $pickIdx   = arg('pick', null);
@@ -193,8 +207,8 @@ $listOnly  = (int) arg('list', 0);
 $format    = (string) arg('format', $isCli ? 'text' : 'html'); // html|json|text
 
 $ctxStr    = (string) arg('ctx', '');
-$findRe    = (string) arg('find', '');   // регэксп для поиска по контекстам
-$findLvl   = (int) arg('level', 2);      // уровень n-грамм для поиска (2 = биграммы)
+$findRe    = (string) arg('find', '');   // regex to search across contexts
+$findLvl   = (int) arg('level', 2);      // n-gram level to search (2 = bigrams)
 $findLimit = (int) arg('find_limit', 50);
 $topK      = max(1, (int) arg('k', 20));
 $lambda    = max(0.0, min(1.0, (float) arg('lambda', 0.4)));
@@ -202,7 +216,7 @@ $lower     = (int) arg('lower', 0);
 $normPunct = (int) arg('normalize_punct', 1);
 $showLevels= (int) arg('show_levels', 1);
 
-// ---------- Выбор модели ----------
+// ---------- Model selection ----------
 $models = scan_models($modelsDir);
 
 if ($isCli) {
@@ -223,10 +237,10 @@ if ($isCli) {
     // --model=auto
     if ($modelPath === 'auto') {
         if (!$models) fail("No models found for auto in: $modelsDir");
-        $modelPath = $models[0]['path']; // самый новый
+        $modelPath = $models[0]['path']; // newest
     }
     if ($modelPath === '') {
-        // Нет модели — покажем список и подсказку
+        // No model — print list and hint
         if (!$models) fail("No models found in: $modelsDir");
         fwrite(STDOUT, "Choose a model:\n");
         foreach ($models as $i=>$m) {
@@ -236,7 +250,7 @@ if ($isCli) {
         exit(0);
     }
 } else {
-    // HTTP режим
+    // HTTP mode
     if ($format === 'json' && $modelPath === '') {
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['ok'=>true, 'dir'=>$modelsDir, 'models'=>$models], JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);
@@ -247,17 +261,17 @@ if ($isCli) {
         $modelPath = $models[0]['path'];
     }
     if ($modelPath === '') {
-        // Рисуем HTML-UI выбора модели
+        // Render HTML UI for model picker
         header('Content-Type: text/html; charset=utf-8');
         $defCtx = $ctxStr ?: 'привет';
         $defK   = $topK;
         $defLam = $lambda;
         ?>
         <!doctype html>
-        <html lang="ru">
+        <html lang="en">
         <head>
             <meta charset="utf-8">
-            <title>debug_weights — Выбор модели</title>
+            <title>debug_weights — Model Selection</title>
             <meta name="viewport" content="width=device-width,initial-scale=1">
             <style>
                 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;line-height:1.45;margin:24px;color:#111}
@@ -277,31 +291,31 @@ if ($isCli) {
         </head>
         <body>
         <div class="card">
-            <h1>Выбор модели N-грамм</h1>
+            <h1>N-gram Model Selection</h1>
             <?php if (!$models): ?>
-                <p>В папке <code><?=htmlspecialchars($modelsDir)?></code> моделей не найдено.</p>
+                <p>No models found in folder <code><?=htmlspecialchars($modelsDir)?></code>.</p>
             <?php else: ?>
                 <form method="get" action="">
                     <div class="row">
                         <div style="flex:1 1 360px">
-                            <label>Модель</label><br>
+                            <label>Model</label><br>
                             <select name="model" required>
-                                <option value="">— выберите модель —</option>
-                                <option value="auto">Самая новая (auto)</option>
+                                <option value="">— select a model —</option>
+                                <option value="auto">Newest (auto)</option>
                                 <?php foreach ($models as $m): ?>
                                     <option value="<?=htmlspecialchars($m['path'])?>">
                                         <?=htmlspecialchars($m['name'])?> — <?=human_size($m['size'])?> — <?=date('Y-m-d H:i',$m['mtime'])?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
-                            <div class="small">Каталог: <code><?=htmlspecialchars($modelsDir)?></code></div>
+                            <div class="small">Directory: <code><?=htmlspecialchars($modelsDir)?></code></div>
                         </div>
                     </div>
 
                     <div class="row" style="margin-top:12px">
                         <div style="flex:1 1 320px">
-                            <label>Контекст (ctx)</label>
-                            <input type="text" name="ctx" value="<?=htmlspecialchars($defCtx)?>" placeholder="привет">
+                            <label>Context (ctx)</label>
+                            <input type="text" name="ctx" value="<?=htmlspecialchars($defCtx)?>" placeholder="hello">
                         </div>
                         <div>
                             <label>Top-K (k)</label>
@@ -318,13 +332,13 @@ if ($isCli) {
                     </div>
 
                     <div class="row" style="margin-top:14px">
-                        <button class="btn" type="submit">Показать топ</button>
-                        <a class="badge" href="?format=json">Список моделей (JSON)</a>
+                        <button class="btn" type="submit">Show Top</button>
+                        <a class="badge" href="?format=json">Models List (JSON)</a>
                     </div>
                 </form>
 
                 <table class="table">
-                    <thead><tr><th>#</th><th>Файл</th><th>Размер</th><th>Дата</th></tr></thead>
+                    <thead><tr><th>#</th><th>File</th><th>Size</th><th>Date</th></tr></thead>
                     <tbody>
                     <?php foreach ($models as $i=>$m): ?>
                         <tr>
@@ -345,11 +359,11 @@ if ($isCli) {
     }
 }
 
-// ---------- Основная логика (к моменту сюда modelPath уже определён) ----------
+// ---------- Main logic (by this point modelPath is determined) ----------
 $ctxStrNorm = normalize_text($ctxStr, (bool)$lower, (bool)$normPunct);
 $model = load_model($modelPath);
 if ($findRe !== '') {
-    // берём явную модель, иначе самую новую из каталога
+    // use explicit modelPath, otherwise the newest model in directory
     $mp = $modelPath ?: ($models[0]['path'] ?? '');
     if ($mp === '') fail("No models found for find in: $modelsDir");
     $model = load_model($mp);
@@ -383,7 +397,7 @@ if ($findRe !== '') {
 $ctxTokens = tokenize_simple($ctxStrNorm);
 $res = top_candidates($model, $ctxTokens, $topK, $lambda, true);
 
-// ---------- Вывод ----------
+// ---------- Output ----------
 if ($isCli) {
     fwrite(STDOUT, "Model: ".basename($modelPath)." (N={$model['N']})\n");
     fwrite(STDOUT, "CTX:   \"{$ctxStrNorm}\"  [".implode(' | ', $ctxTokens)."]\n");
