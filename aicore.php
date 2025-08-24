@@ -165,7 +165,7 @@ $history = &$_SESSION['tokens'];
 $max_history_tokens = 2400;
 
 // добавляем запрос и префикс роли
-$history = array_merge($history, tokenize("Пользователь : ".$user."\nАссистент : "));
+$history = array_merge($history, tokenize("Пользователь : ".$user."\n"));
 if (count($history) > $max_history_tokens) $history = array_slice($history, -$max_history_tokens);
 
 // ——— генерация ———
