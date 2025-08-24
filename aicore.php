@@ -32,6 +32,7 @@ if (!is_file($weights_path)) {
 
 // параметры
 $user        = trim((string)($body['message'] ?? ''));
+$user = mb_strtolower($user, 'UTF-8');
 $max_tokens  = max(1, min(200000, (int)($body['max_tokens']  ?? 1400)));
 $temperature = max(0.05, min(2.0,    (float)($body['temperature'] ?? 0.30)));
 $top_k       = max(1,    min(400,    (int)($body['top_k'] ?? 160)));
@@ -254,7 +255,12 @@ for ($i = 0; $i < $max_tokens; $i++) {
 }
 
 $reply = trim(detok($out));
-if ($reply === '') $reply = ($target_lang === 'en' ? 'OK.' : 'Окей.'); // ★ фолбэк согласован с языком
+if ($reply === '') {
+    $reply = ($target_lang === 'en' ? 'ok.' : 'окей.');
+}
+// приводим всё к нижнему регистру
+$reply = mb_strtolower($reply, 'UTF-8');
+
 $history = array_merge($history, $out);
 
 // ответ
