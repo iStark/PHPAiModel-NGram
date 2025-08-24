@@ -3,6 +3,8 @@
 >N-gram Chat Model (RU/EN)
 > DEMO/ДЕМО https://aiphpngram.asted.cloud/
 
+![Chat Model RU Interface](chatru.png)
+
 >This repository contains a toy word-level N-gram “weights” format and pure-PHP utilities to train, merge, and run a tiny chat model on shared hosting (no SSH, no external services, need OpenServer/Docker/Hosting).
 
 ## Tools included:
