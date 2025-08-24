@@ -44,6 +44,14 @@ if ($user === '') {
     echo json_encode(['error' => 'message is required'], JSON_UNESCAPED_UNICODE);
     exit;
 }
+if (!isset($_SESSION['lang'])) {
+    $_SESSION['lang'] = 'ru'; // стартуем с русского по умолчанию
+}
+$det = detect_lang_from_text($user);  // функция из хелперов
+if ($det !== '') {
+    $_SESSION['lang'] = $det;  // если нашли буквы — обновили
+}
+$target_lang = $_SESSION['lang'];      // 'ru' | 'en'
 
 // грузим модель
 $model = json_decode(file_get_contents($weights_path), true);
@@ -83,6 +91,41 @@ function detok(array $tokens): string {
     }
     return $out;
 }
+
+// --- язык входа / фильтр токенов по алфавиту ---
+function detect_lang_from_text(string $s): string {
+    if (preg_match('/\p{Cyrillic}/u', $s)) return 'ru';
+    if (preg_match('/[A-Za-z]/',       $s)) return 'en';
+    return ''; // нет букв (эмодзи/цифры/знаки)
+}
+function token_is_lang(string $t, string $lang): bool {
+    $has_cyr = (bool)preg_match('/\p{Cyrillic}/u', $t);
+    $has_lat = (bool)preg_match('/[A-Za-z]/',       $t);
+    // нейтральные токены (пунктуация, цифры, переносы) разрешаем всегда
+    if (!$has_cyr && !$has_lat) return true;
+    // жёстко исключаем смешанные слова типа "OKей" (оба алфавита)
+    if ($has_cyr && $has_lat)   return false;
+    return $lang === 'ru' ? ($has_cyr && !$has_lat) : ($has_lat && !$has_cyr);
+}
+function filter_dist_by_lang(array $dist, string $lang): array {
+    if ($lang !== 'ru' && $lang !== 'en') return $dist;
+    $f = [];
+    foreach ($dist as $tok => $w) {
+        if (token_is_lang($tok, $lang)) $f[$tok] = $w;
+    }
+    return $f;
+}
+// ★ только нейтральные токены (если после фильтрации пусто)
+function filter_neutral_only(array $dist): array {
+    $f = [];
+    foreach ($dist as $tok => $w) {
+        $has_cyr = (bool)preg_match('/\p{Cyrillic}/u', $tok);
+        $has_lat = (bool)preg_match('/[A-Za-z]/',       $tok);
+        if (!$has_cyr && !$has_lat) $f[$tok] = $w;
+    }
+    return $f;
+}
+
 function ctx_key(array $arr): string { return implode("\t", $arr); }
 function last_counts(array $seq, int $window): array {
     if ($window <= 0) return [];
@@ -129,6 +172,10 @@ $lambda_unigram = 0.03;
 $order_gamma    = 1.25;
 $min_stop_len   = 8;
 
+// ★ (опционально) параметр для бана точных повторов; если он у тебя
+// где-то задаётся вне этого файла — оставь как есть.
+$no_repeat_ngram = $no_repeat_ngram ?? 0;
+
 $out = [];
 for ($i = 0; $i < $max_tokens; $i++) {
     $seq    = array_merge($history, $out);
@@ -154,7 +201,17 @@ for ($i = 0; $i < $max_tokens; $i++) {
     }
 
     if ($hits === 0) {
-        $chosen = sample_dist($uni, $temperature, $top_k, $top_p, $repCnt, $rep_penalty);
+        // ★ ФОЛБЭК ТОЛЬКО ЧЕРЕЗ ФИЛЬТРАЦИЮ ПО ЯЗЫКУ
+        $cand = filter_dist_by_lang($uni, $target_lang);
+        if (empty($cand)) {
+            // ★ если после фильтрации пусто — оставим только нейтральные знаки
+            $cand = filter_neutral_only($uni);
+        }
+        // запрет повторных n-грамм (если функция определена)
+        if (function_exists('block_no_repeat')) {
+            block_no_repeat($seq, $no_repeat_ngram, $cand);
+        }
+        $chosen = sample_dist($cand, $temperature, $top_k, $top_p, $repCnt, $rep_penalty);
         if ($chosen === null) break;
     } else {
         if ($lambda_unigram > 0) {
@@ -165,13 +222,22 @@ for ($i = 0; $i < $max_tokens; $i++) {
                 }
             }
         }
+        // ★ фильтрация по языку — ПОСЛЕ примеси униграмм
+        $mix = filter_dist_by_lang($mix, $target_lang);
+
+        // запрет повторных n-грамм
+        if (function_exists('block_no_repeat')) {
+            block_no_repeat($seq, $no_repeat_ngram, $mix);
+        }
         $chosen = sample_dist($mix, $temperature, $top_k, $top_p, $repCnt, $rep_penalty);
         if ($chosen === null) break;
 
+        // избегаем внезапного перехода к роли "Пользователь" на новой строке
         $ln = count($out);
         if ($chosen === "Пользователь" && $ln > 0 && $out[$ln-1] === "\n") {
             $mix[$chosen] = 0.0;
-            $chosen = sample_dist($mix ?: $uni, $temperature, $top_k, $top_p, $repCnt, $rep_penalty);
+            // ★ повторная выборка с тем же ОТРЕЗАННЫМ дистрибутивом
+            $chosen = sample_dist($mix ?: filter_dist_by_lang($uni, $target_lang), $temperature, $top_k, $top_p, $repCnt, $rep_penalty);
             if ($chosen === null) break;
         }
     }
@@ -188,7 +254,7 @@ for ($i = 0; $i < $max_tokens; $i++) {
 }
 
 $reply = trim(detok($out));
-if ($reply === '') $reply = 'Окей.'; // фолбэк
+if ($reply === '') $reply = ($target_lang === 'en' ? 'OK.' : 'Окей.'); // ★ фолбэк согласован с языком
 $history = array_merge($history, $out);
 
 // ответ
